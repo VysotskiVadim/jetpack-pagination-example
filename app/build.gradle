@@ -46,8 +46,9 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycleVersion"
 
     implementation "com.squareup.okhttp3:okhttp:$okHttpVersion"
-    implementation("com.squareup.okhttp3:logging-interceptor:$okHttpVersion")
+    implementation "com.squareup.okhttp3:logging-interceptor:$okHttpVersion"
     implementation "com.squareup.retrofit2:retrofit:$retrofitVersion"
+    implementation "com.squareup.moshi:moshi:1.9.2"
 
     implementation "androidx.paging:paging-runtime-ktx:2.1.2"
 

@@ -55,10 +55,14 @@ class PagingExampleViewModel(
     private val _state = MutableLiveData<State>()
     val state: LiveData<State> get() = _state
 
-    val pages = viewModelScope.transformToJetpackPagedResult(::loadItemsPage)
-
-    private suspend fun loadItemsPage(params: PageLoadingParams): ItemsPagedResult.ItemsPage<Item> {
+    val pages = viewModelScope.transformToJetpackPagedResult {
         _state.value = State.Loading
+        val page = loadItemsPage(it)
+        _state.value = State.Loaded(page.itemsCount)
+        page
+    }
+
+    private suspend fun loadItemsPage(params: ItemsPageLoadingParams): ItemsPagedResult.ItemsPage<Item> {
         val loadPageResult = exampleUseCase.requestPage(params.cursor, params.loadSize)
         return when (loadPageResult) {
             is ItemsPagedResult.ItemsPage -> loadPageResult
@@ -68,7 +72,7 @@ class PagingExampleViewModel(
         }
     }
 
-    private suspend fun retryWhenUserAskForIt(params: PageLoadingParams): ItemsPagedResult.ItemsPage<Item> {
+    private suspend fun retryWhenUserAskForIt(params: ItemsPageLoadingParams): ItemsPagedResult.ItemsPage<Item> {
         val retryAfterUserAction = CompletableDeferred<ItemsPagedResult.ItemsPage<Item>>()
         _state.value = State.RetryableError {
             viewModelScope.launch {
@@ -79,8 +83,8 @@ class PagingExampleViewModel(
     }
 }
 
-data class PageLoadingParams(val cursor: PaginationCursor, val loadSize: Int)
-typealias ItemsPageLoader<T> = suspend (PageLoadingParams) -> ItemsPagedResult.ItemsPage<T>
+data class ItemsPageLoadingParams(val cursor: PaginationCursor, val loadSize: Int)
+typealias ItemsPageLoader<T> = suspend (ItemsPageLoadingParams) -> ItemsPagedResult.ItemsPage<T>
 
 fun <T> CoroutineScope.transformToJetpackPagedResult(pageLoader: ItemsPageLoader<T>): LiveData<PagedList<T>> {
     val scope = this
@@ -101,7 +105,7 @@ private class ItemsPaginationDataSource<T>(
         callback: LoadInitialCallback<PaginationCursor, T>
     ) {
         scope.launch {
-            val result = pageLoader(PageLoadingParams(FIRST_PAGE, params.requestedLoadSize))
+            val result = pageLoader(ItemsPageLoadingParams(FIRST_PAGE, params.requestedLoadSize))
             callback.onResult(result.items, NO_PAGE, result.nextCursor)
         }
     }
@@ -111,7 +115,7 @@ private class ItemsPaginationDataSource<T>(
         callback: LoadCallback<PaginationCursor, T>
     ) {
         scope.launch {
-            val result = pageLoader(PageLoadingParams(params.key, params.requestedLoadSize))
+            val result = pageLoader(ItemsPageLoadingParams(params.key, params.requestedLoadSize))
             callback.onResult(result.items, result.nextCursor)
         }
     }
