@@ -5,6 +5,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.*
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -54,24 +55,32 @@ class PagingExampleViewModel(
     private val _state = MutableLiveData<State>()
     val state: LiveData<State> get() = _state
 
-    val pages = viewModelScope.transformToJetpackPagedResult(
-        object : ItemsPageLoader<Item> {
-            override suspend fun loadPage(
-                cursor: PaginationCursor,
-                loadSize: Int
-            ): ItemsPagedResult.ItemsPage<Item> {
-                return loadItemsPage(cursor, loadSize)
+    val pages = viewModelScope.transformToJetpackPagedResult(::loadItemsPage)
+
+    private suspend fun loadItemsPage(params: PageLoadingParams): ItemsPagedResult.ItemsPage<Item> {
+        _state.value = State.Loading
+        val loadPageResult = exampleUseCase.requestPage(params.cursor, params.loadSize)
+        return when (loadPageResult) {
+            is ItemsPagedResult.ItemsPage -> loadPageResult
+            is ItemsPagedResult.Error -> {
+                retryWhenUserAskForIt(params)
             }
         }
-    )
+    }
 
-    private suspend fun loadItemsPage(
-        cursor: PaginationCursor,
-        loadSize: Int
-    ): ItemsPagedResult.ItemsPage<Item> {
-        return TODO()
+    private suspend fun retryWhenUserAskForIt(params: PageLoadingParams): ItemsPagedResult.ItemsPage<Item> {
+        val retryAfterUserAction = CompletableDeferred<ItemsPagedResult.ItemsPage<Item>>()
+        _state.value = State.RetryableError {
+            viewModelScope.launch {
+                retryAfterUserAction.complete(loadItemsPage(params))
+            }
+        }
+        return retryAfterUserAction.await()
     }
 }
+
+data class PageLoadingParams(val cursor: PaginationCursor, val loadSize: Int)
+typealias ItemsPageLoader<T> = suspend (PageLoadingParams) -> ItemsPagedResult.ItemsPage<T>
 
 fun <T> CoroutineScope.transformToJetpackPagedResult(pageLoader: ItemsPageLoader<T>): LiveData<PagedList<T>> {
     val scope = this
@@ -80,10 +89,6 @@ fun <T> CoroutineScope.transformToJetpackPagedResult(pageLoader: ItemsPageLoader
             return ItemsPaginationDataSource(scope, pageLoader)
         }
     }.toLiveData(Config(30, prefetchDistance = 30, enablePlaceholders = false))
-}
-
-interface ItemsPageLoader<T> {
-    suspend fun loadPage(cursor: PaginationCursor, loadSize: Int): ItemsPagedResult.ItemsPage<T>
 }
 
 private class ItemsPaginationDataSource<T>(
@@ -96,7 +101,7 @@ private class ItemsPaginationDataSource<T>(
         callback: LoadInitialCallback<PaginationCursor, T>
     ) {
         scope.launch {
-            val result = pageLoader.loadPage(FIRST_PAGE, params.requestedLoadSize)
+            val result = pageLoader(PageLoadingParams(FIRST_PAGE, params.requestedLoadSize))
             callback.onResult(result.items, NO_PAGE, result.nextCursor)
         }
     }
@@ -106,7 +111,7 @@ private class ItemsPaginationDataSource<T>(
         callback: LoadCallback<PaginationCursor, T>
     ) {
         scope.launch {
-            val result = pageLoader.loadPage(params.key, params.requestedLoadSize)
+            val result = pageLoader(PageLoadingParams(params.key, params.requestedLoadSize))
             callback.onResult(result.items, result.nextCursor)
         }
     }
