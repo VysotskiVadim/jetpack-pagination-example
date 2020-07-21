@@ -1,6 +1,7 @@
 package dev.vadzimv.example.jetpackpaging
 
 import androidx.lifecycle.*
+import androidx.paging.PagedList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import java.lang.IllegalArgumentException
@@ -21,15 +22,15 @@ class PagingExampleViewModel(
     private val _state = MutableLiveData<State>()
     val state: LiveData<State> get() = _state
 
-    val pages = viewModelScope.transformToJetpackPagedResult {
-        _state.value =
-            State.Loading
-        val page = loadItemsPage(it)
-        _state.value =
-            State.Loaded(
-                page.itemsCount
-            )
-        page
+    private val _pages = MutableLiveData<PagedList<ExampleListItem>>()
+    val pages : LiveData<PagedList<ExampleListItem>> by lazy {
+        _pages.value = viewModelScope.createPagedList {
+            _state.value = State.Loading
+            val page = loadItemsPage(it)
+            _state.value = State.Loaded(page.itemsCount)
+            page
+        }
+        _pages
     }
 
     private suspend fun loadItemsPage(pageParams: ItemsPageLoadingParams): ItemsPagedResult.ItemsPage<ExampleListItem> {

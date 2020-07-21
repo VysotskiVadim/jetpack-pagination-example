@@ -1,9 +1,10 @@
 package dev.vadzimv.example.jetpackpaging
 
-import androidx.lifecycle.LiveData
+import android.nfc.tech.MifareUltralight.PAGE_SIZE
 import androidx.paging.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import java.util.concurrent.Executor
 
 typealias PaginationCursor = String?
 
@@ -16,20 +17,29 @@ interface Page<T> {
 }
 
 data class ItemsPageLoadingParams(val cursor: PaginationCursor, val loadSize: Int)
-typealias ItemsPageLoader<T> = suspend (ItemsPageLoadingParams) -> Page<T>
+typealias PageLoader<T> = suspend (ItemsPageLoadingParams) -> Page<T>
 
-fun <T> CoroutineScope.transformToJetpackPagedResult(pageLoader: ItemsPageLoader<T>): LiveData<PagedList<T>> {
+fun <T> CoroutineScope.createPagedList(
+    pageLoader: PageLoader<T>
+): PagedList<T> {
     val scope = this
-    return object : DataSource.Factory<PaginationCursor, T>() {
-        override fun create(): DataSource<PaginationCursor, T> {
-            return ItemsPaginationDataSource(scope, pageLoader)
-        }
-    }.toLiveData(Config(30, prefetchDistance = 30, enablePlaceholders = false))
+    val immediateExecutor = Executor { it.run() }
+    val config = Config(
+        pageSize = 30,
+        prefetchDistance = 30 / 2,
+        initialLoadSizeHint = PAGE_SIZE
+    )
+    val dataSource = PaginationDataSource(scope, pageLoader)
+    return PagedList.Builder(dataSource, config)
+        .setNotifyExecutor(immediateExecutor)
+        .setFetchExecutor(immediateExecutor)
+        .setInitialKey(FIRST_PAGE)
+        .build()
 }
 
-private class ItemsPaginationDataSource<T>(
+private class PaginationDataSource<T>(
     private val scope: CoroutineScope,
-    private val pageLoader: ItemsPageLoader<T>
+    private val pageLoader: PageLoader<T>
 ) : PageKeyedDataSource<PaginationCursor, T>() {
 
     override fun loadInitial(
