@@ -1,11 +1,7 @@
 package dev.vadzimv.example.jetpackpaging
 
 import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.paging.*
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -14,77 +10,13 @@ typealias PaginationCursor = String?
 val NO_PAGE: PaginationCursor = null
 val FIRST_PAGE: PaginationCursor = null
 
-sealed class ItemsPagedResult<T> {
-    data class ItemsPage<T>(
-        val itemsCount: Int,
-        val items: List<T>,
-        val nextCursor: PaginationCursor
-    ) : ItemsPagedResult<T>()
-
-    data class Error<T>(val error: Throwable) : ItemsPagedResult<T>()
-
-    fun <NewT> map(mapper: (List<T>) -> List<NewT>): ItemsPagedResult<NewT> = when (this) {
-        is ItemsPage<T> -> ItemsPage(
-            itemsCount = itemsCount,
-            items = mapper(items),
-            nextCursor = nextCursor
-        )
-        is Error<T> -> Error(error)
-    }
-}
-
-class Item
-
-interface ExampleUseCase {
-    suspend fun requestPage(cursor: PaginationCursor, loadSize: Int): ItemsPagedResult<Item>
-}
-
-class PagingExampleViewModel(
-    private val exampleUseCase: ExampleUseCase
-) : ViewModel() {
-
-    sealed class State {
-        object Loading : State()
-        class RetryableError(private val retry: () -> Unit) : State() {
-            fun retry() = retry.invoke()
-        }
-
-        data class Loaded(val totalItemsCount: Int) : State()
-    }
-
-    private val _state = MutableLiveData<State>()
-    val state: LiveData<State> get() = _state
-
-    val pages = viewModelScope.transformToJetpackPagedResult {
-        _state.value = State.Loading
-        val page = loadItemsPage(it)
-        _state.value = State.Loaded(page.itemsCount)
-        page
-    }
-
-    private suspend fun loadItemsPage(params: ItemsPageLoadingParams): ItemsPagedResult.ItemsPage<Item> {
-        val loadPageResult = exampleUseCase.requestPage(params.cursor, params.loadSize)
-        return when (loadPageResult) {
-            is ItemsPagedResult.ItemsPage -> loadPageResult
-            is ItemsPagedResult.Error -> {
-                retryWhenUserAskForIt(params)
-            }
-        }
-    }
-
-    private suspend fun retryWhenUserAskForIt(params: ItemsPageLoadingParams): ItemsPagedResult.ItemsPage<Item> {
-        val retryAfterUserAction = CompletableDeferred<ItemsPagedResult.ItemsPage<Item>>()
-        _state.value = State.RetryableError {
-            viewModelScope.launch {
-                retryAfterUserAction.complete(loadItemsPage(params))
-            }
-        }
-        return retryAfterUserAction.await()
-    }
+interface Page<T> {
+    val items: List<T>
+    val nextCursor: PaginationCursor
 }
 
 data class ItemsPageLoadingParams(val cursor: PaginationCursor, val loadSize: Int)
-typealias ItemsPageLoader<T> = suspend (ItemsPageLoadingParams) -> ItemsPagedResult.ItemsPage<T>
+typealias ItemsPageLoader<T> = suspend (ItemsPageLoadingParams) -> Page<T>
 
 fun <T> CoroutineScope.transformToJetpackPagedResult(pageLoader: ItemsPageLoader<T>): LiveData<PagedList<T>> {
     val scope = this

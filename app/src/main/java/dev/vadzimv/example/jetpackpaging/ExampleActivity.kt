@@ -1,38 +1,46 @@
 package dev.vadzimv.example.jetpackpaging
 
 import android.os.Bundle
-import com.google.android.material.snackbar.Snackbar
+import androidx.activity.viewModels
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import android.view.Menu
-import android.view.MenuItem
-import kotlinx.android.synthetic.main.activity_scrolling.*
+import androidx.lifecycle.observe
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.snackbar.BaseTransientBottomBar.LENGTH_INDEFINITE
+import com.google.android.material.snackbar.Snackbar
+import kotlinx.android.synthetic.main.activity_example.*
 
 class ExampleActivity : AppCompatActivity() {
 
+    private val viewModel: PagingExampleViewModel by viewModels { PagingExampleViewModelFactory() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_scrolling)
+        setContentView(R.layout.activity_example)
         setSupportActionBar(toolbar)
-        fab.setOnClickListener { view ->
-            Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                    .setAction("Action", null).show()
+        val exampleItemsAdapter = ExamplePagedListAdapter()
+        with(recyclerView) {
+            layoutManager = LinearLayoutManager(context)
+            adapter = exampleItemsAdapter
+            setHasFixedSize(true)
         }
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        menuInflater.inflate(R.menu.menu_scrolling, menu)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-
-        return when (item.itemId) {
-            R.id.action_settings -> true
-            else -> super.onOptionsItemSelected(item)
+        viewModel.pages.observe(this) {
+            exampleItemsAdapter.submitList(it)
+        }
+        viewModel.state.observe(this) { state ->
+            when (state) {
+                PagingExampleViewModel.State.Loading -> {
+                    // show loading
+                }
+                is PagingExampleViewModel.State.RetryableError -> {
+                    Snackbar.make(rootView, "Error loading items", LENGTH_INDEFINITE)
+                        .setAction("Retry") { state.retry() }
+                        .show()
+                }
+                is PagingExampleViewModel.State.Loaded -> {
+                    // show total items count
+                }
+            }
         }
     }
 }
