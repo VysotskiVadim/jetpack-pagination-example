@@ -53,7 +53,7 @@ class FakeDataSource : GetItemsUseCase {
             val items = (startIndex..finishIndex).map { id ->
                 ExampleListItem(id.toLong(), "Test item #$id")
             }
-            val nextPageCursor = if (isNextPageTheLast) NO_PAGE else finishIndex.toString()
+            val nextPageCursor = if (isNextPageTheLast) NO_PAGE else (finishIndex + 1).toString()
             ItemsPagedResult.ItemsPage(totalCount, items, nextPageCursor)
         }
     }

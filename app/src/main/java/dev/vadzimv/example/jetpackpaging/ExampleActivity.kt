@@ -18,7 +18,9 @@ class ExampleActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_example)
         setSupportActionBar(toolbar)
-        val exampleItemsAdapter = ExamplePagedListAdapter()
+        val exampleItemsAdapter = ExamplePagedListAdapter { id ->
+            viewModel.removeItemWithId(id)
+        }
         with(recyclerView) {
             layoutManager = LinearLayoutManager(context)
             adapter = exampleItemsAdapter

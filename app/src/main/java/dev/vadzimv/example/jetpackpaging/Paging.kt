@@ -16,20 +16,26 @@ interface Page<T> {
     val nextCursor: PaginationCursor
 }
 
+class SimplePage<T>(
+    override val items: List<T>,
+    override val nextCursor: PaginationCursor
+) : Page<T>
+
 data class ItemsPageLoadingParams(val cursor: PaginationCursor, val loadSize: Int)
 typealias PageLoader<T> = suspend (ItemsPageLoadingParams) -> Page<T>
 
 fun <T> CoroutineScope.createPagedList(
-    pageLoader: PageLoader<T>
+    pageLoader: PageLoader<T>,
+    initialContent: Page<T>? = null
 ): PagedList<T> {
     val scope = this
     val immediateExecutor = Executor { it.run() }
     val config = Config(
         pageSize = 30,
         prefetchDistance = 30 / 2,
-        initialLoadSizeHint = PAGE_SIZE
+        initialLoadSizeHint = 30
     )
-    val dataSource = PaginationDataSource(scope, pageLoader)
+    val dataSource = PaginationDataSource(scope, pageLoader, initialContent)
     return PagedList.Builder(dataSource, config)
         .setNotifyExecutor(immediateExecutor)
         .setFetchExecutor(immediateExecutor)
@@ -39,16 +45,21 @@ fun <T> CoroutineScope.createPagedList(
 
 private class PaginationDataSource<T>(
     private val scope: CoroutineScope,
-    private val pageLoader: PageLoader<T>
+    private val pageLoader: PageLoader<T>,
+    private val initialContent: Page<T>?
 ) : PageKeyedDataSource<PaginationCursor, T>() {
 
     override fun loadInitial(
         params: LoadInitialParams<PaginationCursor>,
         callback: LoadInitialCallback<PaginationCursor, T>
     ) {
-        scope.launch {
-            val result = pageLoader(ItemsPageLoadingParams(FIRST_PAGE, params.requestedLoadSize))
-            callback.onResult(result.items, NO_PAGE, result.nextCursor)
+        if (initialContent != null) {
+            callback.onResult(initialContent.items, NO_PAGE, initialContent.nextCursor)
+        } else {
+            scope.launch {
+                val result = pageLoader(ItemsPageLoadingParams(FIRST_PAGE, params.requestedLoadSize))
+                callback.onResult(result.items, NO_PAGE, result.nextCursor)
+            }
         }
     }
 

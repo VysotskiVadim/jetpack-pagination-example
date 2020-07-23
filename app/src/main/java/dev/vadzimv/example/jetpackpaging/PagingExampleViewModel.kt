@@ -24,13 +24,23 @@ class PagingExampleViewModel(
 
     private val _pages = MutableLiveData<PagedList<ExampleListItem>>()
     val pages : LiveData<PagedList<ExampleListItem>> by lazy {
-        _pages.value = viewModelScope.createPagedList {
-            _state.value = State.Loading
-            val page = loadItemsPage(it)
-            _state.value = State.Loaded(page.itemsCount)
-            page
-        }
+        _pages.value = viewModelScope.createPagedList(::getPage)
         _pages
+    }
+
+    fun removeItemWithId(id: Long) {
+        val loadedItems = _pages.value?.snapshot()!!.filterNotNull()
+        val updatedList = loadedItems.filter { it.id != id }
+        _pages.value = viewModelScope.createPagedList(::getPage, SimplePage(updatedList, nextPageCursorToLoad))
+    }
+
+    private var nextPageCursorToLoad: PaginationCursor = null
+    private suspend fun getPage(params: ItemsPageLoadingParams): Page<ExampleListItem> {
+        _state.value = State.Loading
+        val page = loadItemsPage(params)
+        nextPageCursorToLoad = page.nextCursor
+        _state.value = State.Loaded(page.itemsCount)
+        return page
     }
 
     private suspend fun loadItemsPage(pageParams: ItemsPageLoadingParams): ItemsPagedResult.ItemsPage<ExampleListItem> {
