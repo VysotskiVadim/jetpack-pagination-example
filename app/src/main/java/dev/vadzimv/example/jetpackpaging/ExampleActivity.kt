@@ -32,17 +32,22 @@ class ExampleActivity : AppCompatActivity() {
         viewModel.state.observe(this) { state ->
             when (state) {
                 PagingExampleViewModel.State.Loading -> {
-                    // show loading
+                    swipeToRefresh.isRefreshing = true
                 }
                 is PagingExampleViewModel.State.RetryableError -> {
+                    swipeToRefresh.isRefreshing = false
                     Snackbar.make(rootView, "Error loading items", LENGTH_INDEFINITE)
                         .setAction("Retry") { state.retry() }
                         .show()
                 }
                 is PagingExampleViewModel.State.Loaded -> {
+                    swipeToRefresh.isRefreshing = false
                     // show total items count
                 }
             }
+        }
+        swipeToRefresh.setOnRefreshListener {
+            viewModel.refresh()
         }
     }
 }

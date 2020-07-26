@@ -11,7 +11,7 @@ import kotlin.random.Random
  */
 interface GetItemsUseCase {
     suspend fun requestPage(
-        pageParams: ItemsPageLoadingParams
+        pageArgs: PageLoadingArgs
     ): ItemsPagedResult<ExampleListItem>
 }
 
@@ -40,15 +40,15 @@ class FakeDataSource : GetItemsUseCase {
     private val errorProbability = 0.5f
 
     override suspend fun requestPage(
-        pageParams: ItemsPageLoadingParams
+        pageArgs: PageLoadingArgs
     ): ItemsPagedResult<ExampleListItem> {
         delay(700) // emulate network delay
         val isErrorThisTime = Random.nextFloat() > errorProbability
         return if (isErrorThisTime) {
             ItemsPagedResult.Error(Error("test error"))
         } else {
-            val startIndex = pageParams.cursor?.toIntOrNull() ?: 0
-            val finishIndex = min(startIndex + pageParams.loadSize, totalCount)
+            val startIndex = pageArgs.cursor?.toIntOrNull() ?: 0
+            val finishIndex = min(startIndex + pageArgs.loadSize, totalCount)
             val isNextPageTheLast = finishIndex == totalCount
             val items = (startIndex..finishIndex).map { id ->
                 ExampleListItem(id.toLong(), "Test item #$id")

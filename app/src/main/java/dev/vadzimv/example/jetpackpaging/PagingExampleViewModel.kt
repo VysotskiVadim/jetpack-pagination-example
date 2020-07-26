@@ -3,8 +3,8 @@ package dev.vadzimv.example.jetpackpaging
 import androidx.lifecycle.*
 import androidx.paging.PagedList
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import java.lang.IllegalArgumentException
 
 class PagingExampleViewModel(
     private val getItemsUseCase: GetItemsUseCase
@@ -22,43 +22,49 @@ class PagingExampleViewModel(
     private val _state = MutableLiveData<State>()
     val state: LiveData<State> get() = _state
 
-    private val _pages = MutableLiveData<PagedList<ExampleListItem>>()
-    val pages : LiveData<PagedList<ExampleListItem>> by lazy {
-        _pages.value = viewModelScope.createPagedList(::getPage)
-        _pages
+    private var currentPagesScope = viewModelScope.createPagesScope(::getPage)
+        set(value) {
+            field.cancel()
+            field = value
+            _pages.value = value.pages
+        }
+    private val _pages = MutableLiveData<PagedList<ExampleListItem>>().apply {
+        value = currentPagesScope.pages
+    }
+    val pages: LiveData<PagedList<ExampleListItem>> get() = _pages
+
+    fun refresh() {
+        currentPagesScope = viewModelScope.createPagesScope(::getPage)
     }
 
     fun removeItemWithId(id: Long) {
-        val loadedItems = _pages.value?.snapshot()!!.filterNotNull()
+        val loadedItems = currentPagesScope.pages.snapshot().filterNotNull()
         val updatedList = loadedItems.filter { it.id != id }
-        _pages.value = viewModelScope.createPagedList(::getPage, SimplePage(updatedList, nextPageCursorToLoad))
+        currentPagesScope = viewModelScope.createPagesScope(::getPage, SimplePage(updatedList, currentPagesScope.nextCursorToLoad))
     }
 
-    private var nextPageCursorToLoad: PaginationCursor = null
-    private suspend fun getPage(params: ItemsPageLoadingParams): Page<ExampleListItem> {
+    private suspend fun getPage(args: PageLoadingArgs): Page<ExampleListItem> {
         _state.value = State.Loading
-        val page = loadItemsPage(params)
-        nextPageCursorToLoad = page.nextCursor
+        val page = loadItemsPage(args)
         _state.value = State.Loaded(page.itemsCount)
         return page
     }
 
-    private suspend fun loadItemsPage(pageParams: ItemsPageLoadingParams): ItemsPagedResult.ItemsPage<ExampleListItem> {
-        val loadPageResult = getItemsUseCase.requestPage(pageParams)
-        return when (loadPageResult) {
+    private suspend fun loadItemsPage(pageArgs: PageLoadingArgs): ItemsPagedResult.ItemsPage<ExampleListItem> {
+        return when (val loadPageResult = getItemsUseCase.requestPage(pageArgs)) {
             is ItemsPagedResult.ItemsPage -> loadPageResult
             is ItemsPagedResult.Error -> {
-                retryWhenUserAskForIt(pageParams)
+                retryWhenUserAskForIt(pageArgs)
             }
         }
     }
 
-    private suspend fun retryWhenUserAskForIt(params: ItemsPageLoadingParams): ItemsPagedResult.ItemsPage<ExampleListItem> {
+    private suspend fun retryWhenUserAskForIt(args: PageLoadingArgs): ItemsPagedResult.ItemsPage<ExampleListItem> {
         val retryAfterUserAction = CompletableDeferred<ItemsPagedResult.ItemsPage<ExampleListItem>>()
         _state.value =
             State.RetryableError {
                 viewModelScope.launch {
-                    retryAfterUserAction.complete(loadItemsPage(params))
+                    retryAfterUserAction.complete(loadItemsPage(args))
                 }
             }
         return retryAfterUserAction.await()

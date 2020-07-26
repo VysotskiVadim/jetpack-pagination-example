@@ -1,6 +1,5 @@
 package dev.vadzimv.example.jetpackpaging
 
-import android.nfc.tech.MifareUltralight.PAGE_SIZE
 import androidx.paging.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -21,8 +20,8 @@ class SimplePage<T>(
     override val nextCursor: PaginationCursor
 ) : Page<T>
 
-data class ItemsPageLoadingParams(val cursor: PaginationCursor, val loadSize: Int)
-typealias PageLoader<T> = suspend (ItemsPageLoadingParams) -> Page<T>
+data class PageLoadingArgs(val cursor: PaginationCursor, val loadSize: Int)
+typealias PageLoader<T> = suspend (PageLoadingArgs) -> Page<T>
 
 fun <T> CoroutineScope.createPagedList(
     pageLoader: PageLoader<T>,
@@ -57,7 +56,7 @@ private class PaginationDataSource<T>(
             callback.onResult(initialContent.items, NO_PAGE, initialContent.nextCursor)
         } else {
             scope.launch {
-                val result = pageLoader(ItemsPageLoadingParams(FIRST_PAGE, params.requestedLoadSize))
+                val result = pageLoader(PageLoadingArgs(FIRST_PAGE, params.requestedLoadSize))
                 callback.onResult(result.items, NO_PAGE, result.nextCursor)
             }
         }
@@ -68,7 +67,7 @@ private class PaginationDataSource<T>(
         callback: LoadCallback<PaginationCursor, T>
     ) {
         scope.launch {
-            val result = pageLoader(ItemsPageLoadingParams(params.key, params.requestedLoadSize))
+            val result = pageLoader(PageLoadingArgs(params.key, params.requestedLoadSize))
             callback.onResult(result.items, result.nextCursor)
         }
     }
